@@ -1,0 +1,68 @@
+version: '3.9'
+
+x-common-variables: &common-variables
+  POSTGRES_USER: "db_username"
+  POSTGRES_PASSWORD: "db_password"
+  POSTGRES_DB: "db_name"
+  SESSION_SECRET: "super duper secret!"
+  API_KEY: "__your_key_here___"
+
+services:
+  db:
+    image: postgres:14
+    restart: always
+    stdin_open: true
+    tty: true
+    cap_add:
+      - SYS_NICE
+    volumes:
+      - "./setup.sql:/docker-entrypoint-initdb.d/setup.sql"
+    ports:
+      - "9906:3306"
+    environment:
+      <<: *common-variables
+
+  nginx:
+    depends_on:
+      - api
+      - client
+    restart: always
+    build:
+      dockerfile: Dockerfile
+      context: ./nginx
+    ports:
+      - "3050:80"
+
+  api:
+    build:
+      dockerfile: Dockerfile
+      context: "./server"
+    depends_on:
+      - db
+    volumes:
+      - /app/node_modules
+      - ./server:/app
+    environment:
+      <<: *common-variables
+
+  client:
+    stdin_open: true
+    environment:
+      - CHOKIDAR_USEPOLLING=true
+      - WDS_SOCKET_PORT=0
+    build:
+      dockerfile: Dockerfile
+      context: ./client
+    volumes:
+      - /app/node_modules
+      - ./client:/app
+
+  adminer:
+    image: adminer:latest
+    restart: unless-stopped
+    ports:
+      - 8000:8080
+    depends_on:
+      - db
+    environment:
+      ADMINER_DEFAULT_SERVER: db
